@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recepción de bultos — Login + App + Escáner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script defer src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+  <style>
+    :root{ --bg:#0b1020; --card:#121a2b; --muted:#9fb0c0; --text:#e9eef5; --accent:#4cc9f0; --ok:#22c55e; --danger:#ef4444; --warn:#f59e0b; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--text);background:linear-gradient(180deg,#0b1020 0%,#0e1530 100%);}    
+    a{color:var(--accent)}
+
+    /* Login */
+    .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .login{width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:20px}
+    .login h1{margin:0 0 8px 0;font-size:22px}
+    .login p{margin:0 0 12px 0;color:var(--muted);font-size:13px}
+    label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px}
+    input,select{width:100%;padding:12px 12px;border-radius:10px;background:#0f1628;border:1px solid #263147;color:var(--text);outline: none;}
+    input[type="date"]{padding:10px 12px}
+    button{border:0;border-radius:12px;padding:12px 16px;background:#1b2a44;color:white;cursor:pointer;font-weight:600}
+    button.primary{background:linear-gradient(135deg,#22c55e,#16a34a)}
+    button.ghost{background:transparent;border:1px dashed #3b4966}
+    button.warn{background:linear-gradient(135deg,#f59e0b,#ea580c)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .hidden{display:none!important}
+
+    /* App */
+    .wrap{max-width:1100px;margin:32px auto;padding:0 16px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    header h1{font-size:28px;margin:0;font-weight:700;letter-spacing:0.2px}
+    header .badge{background:linear-gradient(135deg, #3b82f6, #06b6d4);padding:6px 10px;border-radius:999px;font-size:12px;color:white}
+    .grid{display:grid;grid-template-columns:1.35fr .9fr;gap:16px}
+    @media (max-width: 1200px){.grid{grid-template-columns:1fr}}
+    .card{background:rgba(255,255,255,0.04);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .card h2{margin:0 0 8px 0;font-size:18px}
+    .card .body{padding:16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+    /* Tabla */
+    table{width:100%;border-collapse:collapse}
+    thead th{position:sticky;top:0;background:#0e1626;padding:10px;font-size:12px;color:#b8c7d6;text-align:left;border-bottom:1px solid #1f2b42;z-index:1}
+    tbody td{padding:10px;border-bottom:1px solid #1b2741;font-size:13px;color:#e6eef8}
+    tbody tr:hover{background:rgba(255,255,255,0.03)}
+    .muted{color:var(--muted)}
+    .pill{font-size:11px;padding:3px 8px;border-radius:999px;background:#0e1a2f;border:1px solid #253453;color:#bcd2e7}
+
+    /* Impresión */
+    .print-toolbar{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-top:1px solid #1e2a44;background:#0c1325;border-radius:0 0 16px 16px}
+    .print-area{display:grid;grid-template-columns:repeat(auto-fill, minmax(10cm, 1fr));gap:12px;padding:12px}
+    .label{width:10cm;height:5cm;border:1px solid #111827;background:white;color:#111827;border-radius:6px;padding:10px;display:flex;flex-direction:column;justify-content:space-between}
+    .label .top{display:flex;justify-content:space-between;align-items:flex-start}
+    .label h3{margin:0;font-size:16px}
+    .label .meta{font-size:12px;line-height:1.2}
+    .label .meta b{font-weight:700}
+    .label .destino{font-weight:800;font-size:14px}
+    .label .barcode{width:100%;height:1.8cm}
+    .label .code{font-size:14px;text-align:center;margin-top:4px;letter-spacing:1px}
+    .label small{font-size:11px;color:#374151}
+    .stamp{font-size:11px;color:#374151;text-align:center;margin-top:2px}
+    @media print{ body{background:white} .no-print{display:none !important} .print-only{display:block !important} .print-area{gap:0} @page{size:auto;margin:10mm} }
+
+    /* Escáner */
+    #scannerPanel{padding:12px;border-top:1px dashed #2a3958}
+    #scannerPanel video{width:100%;max-height:280px;border-radius:8px}
+    #envcheck{font-size:12px;margin-top:6px}
+    #scanResult{font-weight:700}
+
+    /* Admin */
+    #adminPanel .role{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid #253453;background:#0e1a2f}
+    #adminOnly{margin-left:12px}
+
+    /* Panel de pruebas */
+    details.test{margin-top:12px}
+    details.test summary{cursor:pointer;color:#b8c7d6}
+    .testlog{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:#0e1626; padding:10px; border-radius:8px; border:1px solid #1f2b42; white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div id="loginView" class="center">
+    <div class="login">
+      <h1>Iniciar sesión</h1>
+      <p>Accede para usar <b>Recepción de bultos</b>.</p>
+      <label>Usuario</label>
+      <input type="text" id="username" placeholder="admin o user" required>
+      <label>Contraseña</label>
+      <input type="password" id="password" placeholder="••••" required>
+      <div class="actions" style="margin-top:12px">
+        <button class="primary" id="btnLogin">Ingresar</button>
+      </div>
+      <p class="muted" style="margin-top:10px">Demo: <code>admin/1234</code> o <code>user/abcd</code>.</p>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="appView" class="hidden">
+    <div class="wrap">
+      <header>
+        <h1>Recepción de bultos</h1>
+        <span class="badge">Web App</span>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px" class="muted">
+          Sesión: <span id="who"></span> · <span id="adminOnly" class="hidden">Perfil: Admin</span>
+          <button id="btnWipe" class="warn hidden" title="Borra recepciones y reinicia correlativo">Borrar BD + Reset</button>
+          · <a href="#" id="logout">Cerrar sesión</a>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- FORMULARIO + ESCÁNER + TESTS -->
+        <section class="card">
+          <div class="body">
+            <h2>Ingreso de recepción</h2>
+            <form id="form">
+              <div class="row">
+                <div>
+                  <label>Usuario</label>
+                  <input id="usuario" required placeholder="Nombre o usuario" />
+                </div>
+                <div>
+                  <label>Fecha de recepción</label>
+                  <input id="fecha" type="date" required />
+                </div>
+              </div>
+              <div class="row3">
+                <div>
+                  <label>Cantidad de bultos</label>
+                  <input id="cantidad" type="number" min="1" step="1" value="1" required />
+                </div>
+                <div>
+                  <label>N° Factura</label>
+                  <input id="factura" placeholder="Opcional" />
+                </div>
+                <div>
+                  <label>N° Orden de compra</label>
+                  <input id="oc" placeholder="Opcional" />
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Proveedor / Origen</label>
+                  <input id="proveedor" required />
+                </div>
+                <div>
+                  <label>Destino interno</label>
+                  <select id="destino" required>
+                    <option value="">Seleccionar…</option>
+                    <option>Arica</option>
+                    <option>Iquique</option>
+                    <option>Antofagasta</option>
+                    <option>Calama</option>
+                    <option>Copiapó</option>
+                    <option>Serena</option>
+                    <option>Concón</option>
+                    <option>CDS (Renca)</option>
+                    <option>TBS (San Bernardo)</option>
+                    <option>Rancagua</option>
+                    <option>Chillan</option>
+                    <option>Concepción</option>
+                    <option>Temuco</option>
+                    <option>Valdivia</option>
+                    <option>Puerto Montt</option>
+                    <option>Coyhaique</option>
+                    <option>Punta Arenas</option>
+                  </select>
+                </div>
+              </div>
+              <div class="help">Al guardar se generará una etiqueta por <b>bulto</b> con código de barras numérico y correlativo (10 dígitos). Se registrará además la <b>fecha/hora de creación</b>.</div>
+              <div class="actions">
+                <button class="primary" type="submit">Guardar y generar etiquetas</button>
+                <button class="ghost" type="button" id="btnExport">Exportar CSV</button>
+                <button class="ghost" type="button" id="btnResetCounter" title="Reiniciar correlativo a 0000000001">Reiniciar correlativo</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Escáner -->
+          <div id="scannerPanel" class="body">
+            <h2>Escanear código de barras</h2>
+            <div class="actions">
+              <button id="startScan" class="primary">Iniciar escáner (cámara)</button>
+              <button id="stopScan" class="warn" disabled>Detener</button>
+              <button id="kbdMode" class="ghost">Modo teclado</button>
+            </div>
+            <div id="envcheck" class="muted"></div>
+            <div style="margin-top:10px">
+              <video id="preview" class="hidden" playsinline></video>
+              <input id="kbdInput" class="hidden" placeholder="Enfoque aquí y escanee con lector tipo teclado o escriba el código y Enter" />
+            </div>
+            <div style="margin-top:10px" class="muted">Resultado: <span id="scanResult">—</span></div>
+          </div>
+
+          <div class="print-toolbar no-print" id="printToolbar" style="display:none">
+            <span class="muted">Etiquetas listas para imprimir</span>
+            <div>
+              <button onclick="window.print()">Imprimir etiquetas</button>
+              <button class="warn" id="clearLabels">Limpiar etiquetas</button>
+            </div>
+          </div>
+          <div class="print-area" id="printArea"></div>
+
+          <details class="test">
+            <summary>Panel de pruebas y diagnósticos</summary>
+            <div class="testlog" id="testlog">(sin ejecutar)</div>
+            <div class="actions" style="margin-top:10px">
+              <button id="runTests" class="ghost">Ejecutar pruebas</button>
+              <button id="simulateScan" class="ghost">Simular escaneo (0000000001)</button>
+            </div>
+          </details>
+        </section>
+
+        <!-- HISTORIAL / BUSCADOR -->
+        <section class="card">
+          <div class="body">
+            <h2>Historial de recepciones</h2>
+            <div class="row3">
+              <div>
+                <label>Desde</label>
+                <input type="date" id="fromDate" />
+              </div>
+              <div>
+                <label>Hasta</label>
+                <input type="date" id="toDate" />
+              </div>
+              <div>
+                <label>Buscar</label>
+                <input id="search" placeholder="Usuario, origen, destino, factura, OC o código…" />
+              </div>
+            </div>
+            <div class="actions">
+              <button id="clearFilters" class="ghost">Limpiar filtros</button>
+            </div>
+            <div class="help">Las fechas filtran por <b>creación</b> del registro. Formato mostrado: <b>DD/MM/AAAA HH:MM</b>.</div>
+          </div>
+          <div class="body" style="padding-top:0">
+            <div style="max-height:480px; overflow:auto;border-radius:12px;border:1px solid #1f2b3f">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Recepción</th>
+                    <th>Creado</th>
+                    <th>Usuario</th>
+                    <th>Origen</th>
+                    <th>Destino</th>
+                    <th>Factura</th>
+                    <th>OC</th>
+                    <th>Código</th>
+                    <th class="no-print">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+            <div class="footer muted">Registros almacenados localmente en este navegador.</div>
+          </div>
+        </section>
+
+        <!-- ADMIN: Solo visible para admin -->
+        <section id="adminPanel" class="card hidden">
+          <div class="body">
+            <h2>Administración de usuarios (solo admin)</h2>
+            <div class="row3">
+              <div>
+                <label>Nuevo usuario</label>
+                <input id="nu_usuario" placeholder="Usuario" />
+              </div>
+              <div>
+                <label>Contraseña</label>
+                <input id="nu_pass" type="password" placeholder="••••" />
+              </div>
+              <div>
+                <label>Rol</label>
+                <select id="nu_rol">
+                  <option value="user">Usuario</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button id="btnCrearUsuario" class="primary">Crear usuario</button>
+              <button id="btnRestaurarDemo" class="ghost" title="Recrear admin/user por defecto">Restaurar demo</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div>
+                <input id="userSearch" placeholder="Buscar usuarios…" />
+              </div>
+            </div>
+          </div>
+          <div class="body" style="padding-top:0">
+            <div style="max-height:300px; overflow:auto;border-radius:12px;border:1px solid #1f2b3f">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th class="no-print">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="userRows"></tbody>
+              </table>
+            </div>
+            <h3 style="margin:14px 0 6px">Auditoría</h3>
+            <div class="actions" style="margin-bottom:8px">
+              <button id="btnAuditExport" class="ghost">Exportar auditoría CSV</button>
+              <button id="btnAuditClear" class="ghost" title="Vaciar auditoría local">Limpiar auditoría</button>
+            </div>
+            <div style="max-height:240px; overflow:auto;border-radius:12px;border:1px solid #1f2b3f">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha/Hora</th>
+                    <th>Usuario</th>
+                    <th>Acción</th>
+                    <th>Detalles</th>
+                  </tr>
+                </thead>
+                <tbody id="auditRows"></tbody>
+              </table>
+            </div>
+            <div class="footer muted">Usuarios y auditoría se guardan en este navegador. Para producción: usar backend + logs centralizados.</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===================
+    //  Persistencia y utilidades generales
+    // ===================
+    const S = { records: 'rb_records_v1', counter: 'rb_counter_v1', users: 'rb_users_v1', audit: 'rb_audit_v1' };
+    // Reemplazo de '$' para evitar conflicto con jQuery u otros
+    const getById = (id)=>document.getElementById(id);
+
+    // Formatos
+    function pad(n){ return String(n).padStart(2,'0'); }
+    function fmtShort(dt){
+      try{
+        const d = (dt instanceof Date) ? dt : new Date(dt);
+        if(isNaN(d)) return '-';
+        return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }catch{ return '-'; }
+    }
+
+    // ---------- Auditoría ----------
+    function loadAudit(){ return JSON.parse(localStorage.getItem(S.audit) || '[]'); }
+    function saveAudit(arr){ localStorage.setItem(S.audit, JSON.stringify(arr)); }
+    function addAudit(action, details){
+      const ts = new Date().toISOString();
+      const user = localStorage.getItem('usuarioActivo') || '(desconocido)';
+      const entry = { ts, user, action, details };
+      const arr = loadAudit();
+      arr.push(entry); saveAudit(arr);
+      renderAudit();
+    }
+    function auditToCSV(){
+      const rows = loadAudit();
+      const header = ['ts','user','action','details'];
+      const escape = (v)=> '"' + String(v ?? '').replace(/"/g,'""') + '"';
+      const lines = [header.join(',')].concat(rows.map(r=>[r.ts,r.user,r.action,escape(r.details)].join(',')));
+      return lines.join('\n');
+    }
+    function renderAudit(){
+      const tbody = getById('auditRows'); if(!tbody) return;
+      const rows = loadAudit().slice().reverse();
+      tbody.innerHTML = '';
+      for(const r of rows){
+        const tr = document.createElement('tr');
+        const when = fmtShort(r.ts);
+        tr.innerHTML = `<td>${when}</td><td>${r.user}</td><td>${r.action}</td><td>${r.details||''}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Usuarios (demo, localStorage)
+    function loadUsers(){ return JSON.parse(localStorage.getItem(S.users) || '[]'); }
+    function saveUsers(arr){ localStorage.setItem(S.users, JSON.stringify(arr)); }
+    function seedUsers(){
+      if(!localStorage.getItem(S.users)){
+        saveUsers([
+          {usuario:'admin', pass:'1234', role:'admin', active:true},
+          {usuario:'user', pass:'abcd', role:'user', active:true}
+        ]);
+        addAudit('SEED_USERS', 'Usuarios demo creados');
+      }
+    }
+    seedUsers();
+
+    function findUser(username){ return loadUsers().find(u=>u.usuario.toLowerCase()===username.toLowerCase()); }
+
+    // ===================
+    //  Autenticación (usa rb_users_v1)
+    // ===================
+    const loginView = getById('loginView');
+    const appView = getById('appView');
+    const btnLogin = getById('btnLogin');
+    const who = getById('who');
+    const adminOnlyChip = getById('adminOnly');
+
+    btnLogin.addEventListener('click', () => {
+      const user = getById('username').value.trim();
+      const pass = getById('password').value.trim();
+      const u = findUser(user);
+      if(!u || !u.active || u.pass !== pass){
+        alert('Usuario/contraseña inválidos o usuario inactivo');
+        addAudit('LOGIN_FAIL', `Intento de ${user}`);
+        return;
+      }
+      localStorage.setItem('usuarioActivo', u.usuario);
+      addAudit('LOGIN_OK', `Usuario ${u.usuario}`);
+      enterApp();
+    });
+
+    getById('logout').addEventListener('click', (e)=>{
+      e.preventDefault();
+      addAudit('LOGOUT', `Usuario ${localStorage.getItem('usuarioActivo')}`);
+      localStorage.removeItem('usuarioActivo');
+      location.reload();
+    });
+
+    function isAdminUser(username){
+      const u = findUser(username||localStorage.getItem('usuarioActivo'));
+      return !!u && u.role==='admin';
+    }
+
+    function enterApp(){
+      const activeUser = localStorage.getItem('usuarioActivo');
+      loginView.classList.add('hidden');
+      appView.classList.remove('hidden');
+      who.textContent = activeUser;
+      const isAdmin = isAdminUser(activeUser);
+      adminOnlyChip.classList.toggle('hidden', !isAdmin);
+      // Prefill y bloquear campo Usuario
+      const trySet = setInterval(()=>{
+        const uf = getById('usuario');
+        if(uf){ uf.value = activeUser; uf.readOnly = true; clearInterval(trySet); }
+      }, 100);
+      // Mostrar panel admin y botones solo-admin
+      getById('adminPanel').classList.toggle('hidden', !isAdmin);
+      getById('btnWipe').classList.toggle('hidden', !isAdmin);
+      getById('btnResetCounter').classList.toggle('hidden', !isAdmin);
+      renderUsers();
+      renderAudit();
+      renderTable(getById('search')?.value||'');
+    }
+
+    // Sesión persistente
+    (function initSession(){
+      const active = localStorage.getItem('usuarioActivo');
+      if(active){
+        const u = findUser(active);
+        if(u && u.active){ enterApp(); }
+        else { localStorage.removeItem('usuarioActivo'); }
+      }
+    })();
+
+    // ===================
+    //  Datos de recepciones + utilidades
+    // ===================
+    // Log de funciones preexistentes y definición segura
+    if(window.loadRecords){ addAudit('FUNC_PREEXISTENTE', 'loadRecords ya existía'); }
+    if(window.saveRecords){ addAudit('FUNC_PREEXISTENTE', 'saveRecords ya existía'); }
+    if(!window.loadRecords){
+      window.loadRecords = function(){ return JSON.parse(localStorage.getItem(S.records) || '[]'); };
+    }
+    if(!window.saveRecords){
+      window.saveRecords = function(arr){ localStorage.setItem(S.records, JSON.stringify(arr)); };
+    }
+    const getCounter = () => parseInt(localStorage.getItem(S.counter) || '1', 10);
+    const setCounter = (n) => localStorage.setItem(S.counter, String(n));
+    function nextCode(){ const n = getCounter(); const code = String(n).padStart(10,'0'); setCounter(n+1); return code; }
+    const escapeCsv = (v)=> '"' + String(v ?? '').replace(/"/g,'""') + '"';
+
+    function toCSV(records){
+      const header = ['fecha','createdAt','usuario','proveedor','destino','factura','oc','codigo'];
+      const lines = [header.join(',')].concat(records.map(r => [r.fecha,r.createdAt||'',r.usuario,escapeCsv(r.proveedor),escapeCsv(r.destino),escapeCsv(r.factura||''),escapeCsv(r.oc||''),r.codigo].join(',')));
+      return lines.join('\n');
+    }
+
+    // ===================
+    //  Filtros de historial
+    // ===================
+    function parseDateOnlyToRangeEnd(value){ // "2025-08-12" -> end of day local
+      if(!value) return null;
+      const d = new Date(value + 'T23:59:59');
+      return isNaN(d) ? null : d;
+    }
+    function parseDateOnlyToRangeStart(value){
+      if(!value) return null;
+      const d = new Date(value + 'T00:00:00');
+      return isNaN(d) ? null : d;
+    }
+    function recordCreatedDate(r){
+      if(r.createdAt) return new Date(r.createdAt);
+      // Backfill para registros antiguos: usar fecha de recepción a medianoche local
+      if(r.fecha) return new Date(r.fecha + 'T00:00:00');
+      return null;
+    }
+
+    // ===================
+    //  Render tabla de recepciones
+    // ===================
+    function renderTable(filter=''){
+      const tbody = getById('rows');
+      const q = filter.trim().toLowerCase();
+      const from = parseDateOnlyToRangeStart(getById('fromDate')?.value||'');
+      const to = parseDateOnlyToRangeEnd(getById('toDate')?.value||'');
+      const rows = loadRecords().filter(r => {
+        const inText = !q || Object.values(r).some(v => String(v).toLowerCase().includes(q));
+        const cd = recordCreatedDate(r);
+        const inRange = (!from || (cd && cd >= from)) && (!to || (cd && cd <= to));
+        return inText && inRange;
+      });
+      tbody.innerHTML = '';
+      for(const r of rows.slice().reverse()){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.fecha || '-'}</td>
+          <td>${fmtShort(recordCreatedDate(r))}</td>
+          <td>${r.usuario}</td>
+          <td>${r.proveedor}</td>
+          <td>${r.destino}</td>
+          <td>${r.factura||''}</td>
+          <td>${r.oc||''}</td>
+          <td><code>${r.codigo}</code></td>
+          <td class="no-print"><button class="pill" data-print="${r.codigo}">Imprimir</button></td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // ===================
+    //  Etiquetas
+    // ===================
+    function addLabel(record){
+      const area = getById('printArea');
+      const el = document.createElement('div');
+      el.className = 'label';
+      const createdStr = fmtShort(record.createdAt || new Date());
+      el.innerHTML = `
+        <div class="top">
+          <h3>Recepción de bultos</h3>
+          <div class="meta">
+            <div><b>Fecha:</b> ${record.fecha}</div>
+            <div><b>Usuario:</b> ${record.usuario}</div>
+            <div class="destino"><b>Destino:</b> ${record.destino}</div>
+          </div>
+        </div>
+        <div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+            <small><b>Origen:</b> ${record.proveedor}</small>
+            <small><b>Factura:</b> ${record.factura||'-'}</small>
+            <small><b>OC:</b> ${record.oc||'-'}</small>
+            <small><b>Código:</b> ${record.codigo}</small>
+          </div>
+          <svg class="barcode"></svg>
+          <div class="code">${record.codigo}</div>
+          <div class="stamp">Creado: ${createdStr}</div>
+        </div>`;
+      area.appendChild(el);
+      JsBarcode(el.querySelector('.barcode'), record.codigo, { format:'CODE128', displayValue:false, margin:0, width:2, height:60 });
+      getById('printToolbar').style.display = 'flex';
+    }
+
+    function clearLabels(){ getById('printArea').innerHTML=''; getById('printToolbar').style.display='none'; }
+
+    // ===================
+    //  Form + eventos (recepciones)
+    // ===================
+    window.addEventListener('DOMContentLoaded', () => {
+      // Fecha por defecto: hoy
+      const today = new Date();
+      getById('fecha').value = new Date(today.getTime() - today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      renderTable('');
+
+      getById('form').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const usuario = getById('usuario').value.trim();
+        const fecha = getById('fecha').value;
+        const proveedor = getById('proveedor').value.trim();
+        const factura = getById('factura').value.trim();
+        const oc = getById('oc').value.trim();
+        const destino = getById('destino').value;
+        const cantidad = Math.max(1, parseInt(getById('cantidad').value, 10) || 1);
+        if(!usuario || !fecha || !proveedor || !destino){ alert('Completa los campos obligatorios.'); return; }
+        const createdAtISO = new Date().toISOString();
+        const records = loadRecords();
+        const batch = [];
+        for(let i=0;i<cantidad;i++){
+          const codigo = nextCode();
+          const rec = { fecha, createdAt: createdAtISO, usuario, proveedor, destino, factura, oc, codigo };
+          records.push(rec); batch.push(rec);
+        }
+        saveRecords(records); renderTable(getById('search').value); clearLabels(); batch.forEach(addLabel);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        getById('form').reset(); getById('fecha').value = new Date(today.getTime() - today.getTimezoneOffset()*60000).toISOString().slice(0,10); getById('cantidad').value = 1;
+        // Rellenar de nuevo el usuario bloqueado
+        const active = localStorage.getItem('usuarioActivo');
+        if(active){ getById('usuario').value = active; getById('usuario').readOnly = true; }
+      });
+
+      // Filtros
+      getById('search').addEventListener('input', ()=>{ renderTable(getById('search').value); });
+      getById('fromDate').addEventListener('change', ()=> renderTable(getById('search').value));
+      getById('toDate').addEventListener('change', ()=> renderTable(getById('search').value));
+      getById('clearFilters').addEventListener('click', ()=>{ getById('fromDate').value=''; getById('toDate').value=''; getById('search').value=''; renderTable(''); });
+
+      getById('rows').addEventListener('click', (e)=>{
+        const btn = e.target.closest('button[data-print]');
+        if(btn){ const code = btn.getAttribute('data-print'); const rec = loadRecords().find(r=>r.codigo===code); if(rec){ clearLabels(); addLabel(rec); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } }
+      });
+      getById('clearLabels').addEventListener('click', clearLabels);
+      getById('btnExport').addEventListener('click', ()=>{ const csv = toCSV(loadRecords()); const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='recepciones.csv'; a.click(); URL.revokeObjectURL(url); addAudit('EXPORT_CSV', `Registros exportados: ${loadRecords().length}`); });
+      getById('btnResetCounter').addEventListener('click', ()=>{ if(!isAdminUser(localStorage.getItem('usuarioActivo'))){ alert('Solo un administrador puede reiniciar el correlativo.'); return; } if(confirm('¿Reiniciar el correlativo a 0000000001?')){ setCounter(1); alert('Listo. El próximo código será 0000000001.'); addAudit('RESET_COUNTER','Counter -> 1'); } });
+
+      // Panel de pruebas
+      getById('runTests').addEventListener('click', runTests);
+      getById('simulateScan').addEventListener('click', ()=> handleScannedCode('0000000001'));
+
+      // Admin: eventos
+      getById('btnCrearUsuario').addEventListener('click', createUserFromForm);
+      getById('userSearch').addEventListener('input', ()=> renderUsers(getById('userSearch').value));
+      getById('btnRestaurarDemo').addEventListener('click', ()=>{ if(confirm('¿Restablecer usuarios demo?')){ localStorage.removeItem(S.users); seedUsers(); renderUsers(); alert('Usuarios demo restaurados.'); addAudit('RESTORE_DEMO_USERS','Usuarios demo restaurados'); } });
+      getById('btnWipe').addEventListener('click', wipeDatabaseConfirm);
+      getById('btnAuditExport').addEventListener('click', ()=>{ const csv = auditToCSV(); const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='auditoria.csv'; a.click(); URL.revokeObjectURL(url); });
+      getById('btnAuditClear').addEventListener('click', ()=>{ if(confirm('¿Vaciar auditoría?')){ saveAudit([]); renderAudit(); addAudit('AUDIT_CLEARED','Auditoría limpiada'); } });
+    });
+
+    // ===================
+    //  Escáner (Quagga + modo teclado)
+    // ===================
+    const envMsg = getById('envcheck');
+    const preview = getById('preview');
+    const startBtn = getById('startScan');
+    const stopBtn = getById('stopScan');
+    const kbdBtn = getById('kbdMode');
+    const kbdInput = getById('kbdInput');
+    const scanResultEl = getById('scanResult');
+    let scanning = false;
+
+    function secureEnv(){
+      return (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    }
+
+    function updateEnvBanner(){
+      if(!secureEnv()){
+        envMsg.innerHTML = '⚠️ Para usar la cámara, abre esta página con <b>https://</b> o en <b>localhost</b>. Como alternativa, usa <b>Modo teclado</b> con un lector USB que emule teclado.';
+      } else {
+        envMsg.textContent = 'Entorno OK. Al iniciar, el navegador solicitará permiso de cámara.';
+      }
+    }
+    updateEnvBanner();
+
+    startBtn.addEventListener('click', async()=>{
+      if(!secureEnv()){ alert('Entorno no seguro para cámara. Usa https o Modo teclado.'); return; }
+      try{
+        await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      }catch(err){
+        console.error('Permiso de cámara denegado:', err);
+        alert('No se pudo acceder a la cámara. Verifica permisos del navegador o usa Modo teclado.');
+        return;
+      }
+      initQuagga();
+    });
+
+    stopBtn.addEventListener('click', stopQuagga);
+
+    kbdBtn.addEventListener('click', ()=>{
+      preview.classList.add('hidden'); stopQuagga();
+      kbdInput.classList.remove('hidden'); kbdInput.focus();
+    });
+
+    kbdInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){
+        const code = kbdInput.value.trim();
+        if(code){ handleScannedCode(code); kbdInput.value=''; }
+      }
+    });
+
+    function initQuagga(){
+      if(scanning){ return; }
+      preview.classList.remove('hidden');
+      Quagga.init({
+        inputStream: { type:'LiveStream', target: preview, constraints: { facingMode:'environment' } },
+        decoder: { readers: ['code_128_reader','ean_reader','ean_8_reader'] },
+        locate: true
+      }, (err)=>{
+        if(err){ console.error(err); alert('Error iniciando escáner: '+ err.message); return; }
+        Quagga.start(); scanning = true; startBtn.disabled = true; stopBtn.disabled = false; envMsg.textContent = 'Escáner activo. Apunta al código de barras.';
+      });
+      Quagga.offDetected(onDetected); // evitar duplicados si re-inicia
+      Quagga.onDetected(onDetected);
+    }
+
+    function onDetected(data){
+      const code = data?.codeResult?.code;
+      if(!code) return;
+      handleScannedCode(code);
+    }
+
+    function stopQuagga(){
+      if(!scanning) return;
+      try{ Quagga.stop(); }catch(_){ }
+      scanning = false; startBtn.disabled = false; stopBtn.disabled = true; envMsg.textContent = 'Escáner detenido.'; preview.classList.add('hidden');
+    }
+
+    function handleScannedCode(code){
+      scanResultEl.textContent = code;
+      const rec = loadRecords().find(r=>String(r.codigo)===String(code));
+      if(rec){
+        clearLabels(); addLabel(rec);
+        renderTable(getById('search').value);
+        highlightRow(code);
+      } else {
+        alert('Código '+code+' no encontrado en historial.');
+      }
+    }
+
+    function highlightRow(code){
+      const rows = Array.from(document.querySelectorAll('#rows tr'));
+      for(const tr of rows){ if(tr.textContent.includes(code)){ tr.style.outline='2px solid var(--accent)'; setTimeout(()=> tr.style.outline='none', 2000); break; } }
+    }
+
+    // ===================
+    //  Admin: herramientas (wipe) y CRUD de usuarios (solo admin)
+    // ===================
+    function wipeDatabaseConfirm(){
+      if(!isAdminUser(localStorage.getItem('usuarioActivo'))){
+        alert('Solo un administrador puede realizar esta acción.');
+        return;
+      }
+      const step1 = confirm('Esta acción BORRARÁ todas las recepciones y reiniciará el correlativo a 0000000001. ¿Continuar?');
+      if(!step1) return;
+      const step2 = prompt('Escribe BORRAR para confirmar:');
+      if(step2 !== 'BORRAR'){ alert('Confirmación cancelada.'); return; }
+      const preCount = loadRecords().length;
+      const preCounter = getCounter();
+      wipeDatabase();
+      addAudit('WIPE_DB_RESET_COUNTER', `Registros eliminados: ${preCount}; counter antes: ${preCounter} → después: ${getCounter()}`);
+      alert('Base de datos borrada y correlativo reiniciado.');
+    }
+    function wipeDatabase(){
+      localStorage.removeItem(S.records); // limpia recepciones
+      setCounter(1);                      // reinicia correlativo
+      clearLabels();
+      renderTable('');
+    }
+
+    // ===================
+    //  Admin: CRUD de usuarios (solo admin)
+    // ===================
+    function renderUsers(filter=''){
+      const tbody = getById('userRows');
+      if(!tbody) return;
+      const me = localStorage.getItem('usuarioActivo');
+      const q = filter.trim().toLowerCase();
+      const list = loadUsers().filter(u => !q || u.usuario.toLowerCase().includes(q));
+      tbody.innerHTML = '';
+      for(const u of list){
+        const isSelfAdmin = (u.usuario === me && u.role === 'admin');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${u.usuario}</td>
+          <td><span class="role">${u.role}</span></td>
+          <td>${u.active? 'Activo':'Inactivo'}</td>
+          <td class="no-print">
+            <button class="pill" data-action="toggle" data-user="${u.usuario}" ${isSelfAdmin? 'disabled title="No puedes inactivar tu propio admin"' : ''}>${u.active?'Inactivar':'Activar'}</button>
+            <button class="pill" data-action="pass" data-user="${u.usuario}">Cambiar contraseña</button>
+            <button class="pill" data-action="role" data-user="${u.usuario}" ${isSelfAdmin? 'disabled title="No puedes cambiar tu propio rol de admin"' : ''}>Cambiar rol</button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+
+      tbody.onclick = (e)=>{
+        const btn = e.target.closest('button[data-action]');
+        if(!btn) return;
+        const action = btn.getAttribute('data-action');
+        const username = btn.getAttribute('data-user');
+        if(action==='toggle') toggleUser(username);
+        if(action==='pass') changePassword(username);
+        if(action==='role') changeRole(username);
+      };
+    }
+
+    function createUserFromForm(){
+      const usuario = getById('nu_usuario').value.trim();
+      const pass = getById('nu_pass').value;
+      const role = getById('nu_rol').value;
+      if(!usuario || !pass){ alert('Usuario y contraseña son obligatorios.'); return; }
+      const users = loadUsers();
+      if(users.some(u=>u.usuario.toLowerCase()===usuario.toLowerCase())){ alert('Ese usuario ya existe.'); return; }
+      users.push({usuario, pass, role, active:true});
+      saveUsers(users);
+      getById('nu_usuario').value=''; getById('nu_pass').value=''; getById('nu_rol').value='user';
+      renderUsers(getById('userSearch').value||'');
+      addAudit('USER_CREATE', `Usuario: ${usuario}; Rol: ${role}`);
+      alert('Usuario creado.');
+    }
+
+    function toggleUser(username){
+      const me = localStorage.getItem('usuarioActivo');
+      const users = loadUsers();
+      const u = users.find(x=>x.usuario===username);
+      if(!u) return;
+      // Bloquear que el admin se inhabilite a sí mismo
+      if(u.usuario===me && u.role==='admin' && u.active){
+        alert('No puedes inactivar tu propio usuario administrador.');
+        return;
+      }
+      // No dejar al sistema sin al menos un admin activo
+      if(u.role==='admin' && u.active){
+        const activeAdmins = users.filter(x=>x.role==='admin' && x.active).length;
+        if(activeAdmins <= 1){
+          alert('Debe existir al menos un administrador activo.');
+          return;
+        }
+      }
+      u.active = !u.active; saveUsers(users); renderUsers(getById('userSearch').value||'');
+      addAudit('USER_'+(u.active?'ACTIVATE':'INACTIVATE'), `Usuario: ${username}`);
+    }
+
+    function changePassword(username){
+      const p1 = prompt('Nueva contraseña para '+username+':');
+      if(p1===null) return;
+      const p2 = prompt('Confirma la nueva contraseña:');
+      if(p2===null) return;
+      if(p1!==p2){ alert('Las contraseñas no coinciden.'); return; }
+      const users = loadUsers();
+      const u = users.find(x=>x.usuario===username); if(!u) return;
+      u.pass = p1; saveUsers(users); addAudit('USER_PASS_CHANGE', `Usuario: ${username}`); alert('Contraseña actualizada.');
+    }
+
+    function changeRole(username){
+      const users = loadUsers();
+      const u = users.find(x=>x.usuario===username); if(!u) return;
+      const current = localStorage.getItem('usuarioActivo');
+      const newRole = prompt('Rol para '+username+' (admin/user):', u.role);
+      if(!newRole || !['admin','user'].includes(newRole)) { alert('Rol inválido.'); return; }
+      // Evitar que el admin se quite su propio rol
+      if(username===current && u.role==='admin' && newRole!=='admin'){
+        alert('No puedes quitarte el rol de administrador.');
+        return;
+      }
+      // No dejar al sistema sin al menos un admin activo
+      if(u.role==='admin' && newRole!=='admin'){
+        const activeAdmins = users.filter(x=>x.role==='admin' && x.active).length;
+        if(activeAdmins <= 1){
+          alert('Debe existir al menos un administrador activo.');
+          return;
+        }
+      }
+      u.role = newRole; saveUsers(users); renderUsers(getById('userSearch').value||'');
+      addAudit('USER_ROLE_CHANGE', `Usuario: ${username}; Nuevo rol: ${newRole}`);
+    }
+
+    // ===================
+    //  Pruebas simples ("test cases")
+    // ===================
+    function runTests(){
+      const out = [];
+      function log(ok,msg){ out.push((ok?'✅ ':'❌ ')+msg); if(!ok) console.error(msg); }
+      // Test 0: helper DOM no colisiona con jQuery
+      log(typeof getById === 'function', 'getById() existe y evita colisión con $');
+      log(!(window.hasOwnProperty('$') && window.$ === getById), 'No redefinimos el global $');
+      // Test 1: nextCode retorna 10 dígitos y solo numérico
+      const before = getCounter(); const c1 = nextCode(); setCounter(before); // no alterar secuencia
+      log(/^\d{10}$/.test(c1), 'nextCode() entrega 10 dígitos');
+      log(!isNaN(Number(c1)), 'nextCode() es numérico');
+      // Test 2: correlatividad
+      const b = getCounter(); const x = nextCode(); const y = nextCode(); setCounter(b);
+      log(Number(y) - Number(x) === 1, 'Correlativo incrementa en 1');
+      // Test 3: guardar N bultos crea N registros
+      const beforeRecords = loadRecords().length;
+      const sample = { fecha:'2025-08-12', createdAt:new Date().toISOString(), usuario:'tester', proveedor:'ProveedorX', destino:'Arica', factura:'F1', oc:'OC1' };
+      const tmpStore = loadRecords();
+      const n = 3; const codes=[]; for(let i=0;i<n;i++){ const codigo = nextCode(); codes.push(codigo); tmpStore.push({...sample, codigo}); }
+      saveRecords(tmpStore);
+      const afterRecords = loadRecords().length; log(afterRecords - beforeRecords === n, 'Guardar N bultos agrega N filas');
+      // limpieza
+      saveRecords(loadRecords().slice(0,beforeRecords)); setCounter(b);
+      // Test 4: simulación de escaneo encuentra registro (usando code conocido)
+      const testCode = '0000000001';
+      const tmp2 = loadRecords(); tmp2.push({...sample, codigo:testCode}); saveRecords(tmp2);
+      let found = !!loadRecords().find(r=>r.codigo===testCode);
+      log(found, 'Registro de prueba con código 0000000001 guardado');
+      // restaurar
+      saveRecords(loadRecords().filter(r=>r.codigo!==testCode));
+      // Test 5: protección admin — no auto-inactivación
+      const bu = loadUsers();
+      saveUsers([{usuario:'admin', pass:'x', role:'admin', active:true},{usuario:'user', pass:'x', role:'user', active:true}]);
+      localStorage.setItem('usuarioActivo','admin');
+      toggleUser('admin');
+      const adminStillActive = !!(findUser('admin') && findUser('admin').active);
+      log(adminStillActive, 'No permite inactivar al propio admin');
+      // Test 6: filtros por fecha de creación
+      const tmp4 = loadRecords();
+      const base = new Date();
+      const rA = {...sample, codigo:'9000000001', createdAt:new Date(base.getTime()-3*86400000).toISOString()};
+      const rB = {...sample, codigo:'9000000002', createdAt:new Date(base.getTime()-1*86400000).toISOString()};
+      tmp4.push(rA, rB); saveRecords(tmp4);
+      getById('fromDate').value = new Date(base.getTime()-2*86400000).toISOString().slice(0,10);
+      getById('toDate').value = new Date(base.getTime()-0*86400000).toISOString().slice(0,10);
+      renderTable('');
+      const txt = getById('rows').textContent;
+      log(txt.includes('9000000002') && !txt.includes('9000000001'), 'Filtro por rango incluye solo los del rango');
+      // Restaurar
+      saveRecords(loadRecords().filter(r=>r.codigo!=='9000000001' && r.codigo!=='9000000002'));
+      getById('fromDate').value=''; getById('toDate').value=''; renderTable('');
+      // Test 7: API de registros disponible y funcional
+      log(typeof loadRecords === 'function', 'loadRecords está disponible como función global');
+      log(Array.isArray(loadRecords()), 'loadRecords() retorna un arreglo');
+      // Mostrar resultados
+      getById('testlog').textContent = out.join('\n');
+    }
+  </script>
+</body>
+</html>
